@@ -46,13 +46,13 @@ runs:
             COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n 1)
             
             BODY="$MARKER
-            ### 📜 Changelog fragment required
-            
-            This pull request contains changes that usually require a changelog fragment. 
-            
-            **How to fix:**
-            1. Add a small YAML file under \`${{ inputs.fragments-dir }}/\` (e.g. \`${{ inputs.fragments-dir }}/20251223_my_change.yml\`).
-            2. If this change is truly non-user-visible, add the PR label \`no-changelog\` to bypass this check."
+### 📜 Changelog fragment required
+
+This pull request contains changes that usually require a changelog fragment. 
+
+**How to fix:**
+1. Add a small YAML file under \`${{ inputs.fragments-dir }}/\` (e.g. \`${{ inputs.fragments-dir }}/20251223_my_change.yml\`).
+2. If this change is truly non-user-visible, add the PR label \`no-changelog\` to bypass this check."
             
             if [ -z "$COMMENT_ID" ]; then
               gh pr comment "$PR_NUMBER" --body "$BODY"

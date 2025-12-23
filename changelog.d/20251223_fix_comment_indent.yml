@@ -1,0 +1,6 @@
+component: GitHub Actions
+type: patch
+summary: Fix Markdown indentation in require-fragment auto-comment to prevent it from rendering as a code block.
+refs:
+  - .github/actions/require-fragment/action.yml
+
