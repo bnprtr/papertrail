@@ -1,0 +1,83 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type (ignored if version is set)"
+        type: choice
+        required: true
+        default: patch
+        options: [patch, minor, major]
+      version:
+        description: "Explicit version to release (e.g. v0.3.0). If set, bump is ignored."
+        type: string
+        required: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-release-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Compute version
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            LATEST="$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)"
+            if [[ -z "$LATEST" ]]; then
+              LATEST="v0.0.0"
+            fi
+            v="${LATEST#v}"
+            IFS='.' read -r MA MI PA <<< "$v"
+            case "${{ inputs.bump }}" in
+              major) MA=$((MA+1)); MI=0; PA=0 ;;
+              minor) MI=$((MI+1)); PA=0 ;;
+              patch) PA=$((PA+1)) ;;
+            esac
+            VERSION="v${MA}.${MI}.${PA}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Merge changelog fragments
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          go run ./cmd/papertrail merge \
+            --version "$VERSION" \
+            --release-notes-out .release-notes.md
+          printf '%s\n' "$VERSION" > .release-version
+
+      - name: Create release PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(release): ${{ steps.ver.outputs.version }}"
+          title: "chore(release): ${{ steps.ver.outputs.version }}"
+          body-path: .release-notes.md
+          branch: release-pending
+          base: main
+          labels: release
+          add-paths: |
+            CHANGELOG.md
+            changelog.d/
+            .release-notes.md
+            .release-version
+

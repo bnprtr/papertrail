@@ -1,0 +1,41 @@
+name: 'Papertrail: Preview'
+description: 'Generates a changelog preview file from PR fragments.'
+inputs:
+  base-ref:
+    description: 'Base branch name to diff against (e.g. main)'
+    required: true
+  manifest:
+    description: 'Path to release config manifest'
+    required: false
+    default: '.papertrail.config.yml'
+  version:
+    description: 'Version of papertrail CLI to use (e.g. latest, v0.1.0)'
+    required: false
+    default: 'latest'
+  output-file:
+    description: 'Path to write the preview markdown to'
+    required: false
+    default: '.changelog-preview.md'
+outputs:
+  has_fragments:
+    description: 'True if fragments were found in the PR'
+    value: ${{ steps.build.outputs.has_fragments }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Build preview
+      shell: bash
+      id: build
+      run: |
+        BASE_REF="origin/${{ inputs.base-ref }}"
+        git fetch origin "${{ inputs.base-ref }}" --depth=1
+        CHANGED="$(git diff --name-only "${BASE_REF}...HEAD")"
+        FRAGS="$(echo "$CHANGED" | grep -E '^changelog\.d/.*\.(yml|yaml)$' || true)"
+        if [[ -z "$FRAGS" ]]; then
+          echo "has_fragments=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        go run github.com/bnprtr/papertrail/cmd/papertrail@${{ inputs.version }} preview \
+          --manifest "${{ inputs.manifest }}" $FRAGS > "${{ inputs.output-file }}"
+        echo "has_fragments=true" >> "$GITHUB_OUTPUT"
+
