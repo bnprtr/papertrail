@@ -36,7 +36,7 @@ runs:
         EXIT_CODE=$?
         
         # Only attempt commenting if a token is provided and we are in a PR context
-        if [[ -n "${{ inputs.token }}" && "${{ github.event_name }}" == "pull_request" ]]; then
+        if [[ -n "${{ inputs.token }}" && ( "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "pull_request_target" ) ]]; then
           PR_NUMBER="${{ github.event.pull_request.number }}"
           REPO="${{ github.repository }}"
           MARKER="<!-- papertrail-fragment-required -->"
