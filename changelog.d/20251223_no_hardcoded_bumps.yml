@@ -1,0 +1,5 @@
+component: CLI
+type: patch
+summary: Remove hardcoded bump semantics for specific fragment type names; when no bump rule matches, Papertrail defaults to patch and expects explicit config mapping.
+refs:
+  - cmd/papertrail/main.go

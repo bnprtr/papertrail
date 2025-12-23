@@ -1,0 +1,6 @@
+component: CLI
+type: patch
+summary: Use calmer default fragment type names (breaking, feature, fix, patch, refactor, docs) while keeping compatibility via type aliases.
+refs:
+  - .papertrail.config.yml
+  - cmd/papertrail/main.go
