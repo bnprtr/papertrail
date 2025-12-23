@@ -1,0 +1,29 @@
+name: 'Papertrail: Require Fragment'
+description: 'Ensures a changelog fragment is present if non-doc changes are detected.'
+inputs:
+  base-ref:
+    description: 'Base branch name to diff against (e.g. main)'
+    required: true
+  fragments-dir:
+    description: 'Directory where fragments are stored'
+    required: false
+    default: 'changelog.d'
+  manifest:
+    description: 'Path to release config manifest'
+    required: false
+    default: '.papertrail.config.yml'
+  version:
+    description: 'Version of papertrail CLI to use (e.g. latest, v0.1.0)'
+    required: false
+    default: 'latest'
+runs:
+  using: 'composite'
+  steps:
+    - name: Require fragment
+      shell: bash
+      run: |
+        go run github.com/bnprtr/papertrail/cmd/papertrail@${{ inputs.version }} pr-fragment \
+          --base-ref "origin/${{ inputs.base-ref }}" \
+          --fragments "${{ inputs.fragments-dir }}" \
+          --manifest "${{ inputs.manifest }}"
+

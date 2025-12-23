@@ -1,0 +1,57 @@
+name: changelog-preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build preview body
+        id: body
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          CHANGED="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
+
+          FRAGS="$(echo "$CHANGED" | grep -E '^changelog\.d/.*\.(yml|yaml)$' || true)"
+          if [[ -z "$FRAGS" ]]; then
+            echo "has_fragments=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          go run ./cmd/papertrail preview --manifest .papertrail.config.yml $FRAGS > .changelog-preview.md
+          echo "has_fragments=true" >> "$GITHUB_OUTPUT"
+
+      - name: Find existing preview comment
+        if: steps.body.outputs.has_fragments == 'true'
+        id: find
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "<!-- papertrail-preview -->"
+
+      - name: Create or update preview comment
+        if: steps.body.outputs.has_fragments == 'true'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          edit-mode: replace
+          body-path: .changelog-preview.md
+

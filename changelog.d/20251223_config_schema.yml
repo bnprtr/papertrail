@@ -1,0 +1,7 @@
+component: CLI
+type: breaking
+summary: Simplify and generalize configuration by making fragment types configurable, flattening version bump rules, and renaming the default config file to .papertrail.config.yml.
+refs:
+  - cmd/papertrail/main.go
+  - .papertrail.config.yml
+

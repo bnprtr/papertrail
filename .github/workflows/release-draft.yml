@@ -1,0 +1,121 @@
+name: release-draft
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release-draft
+  cancel-in-progress: true
+
+jobs:
+  open-or-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Detect fragments
+        id: frags
+        shell: bash
+        run: |
+          set -euo pipefail
+          FRAGS="$(find changelog.d -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | sort || true)"
+          if [[ -z "$FRAGS" ]]; then
+            echo "No unarchived fragments found; nothing to release."
+            echo "has_fragments=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "has_fragments=true" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version
+        if: steps.frags.outputs.has_fragments == 'true'
+        id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          LATEST="$(git tag -l 'v*' --sort=-v:refname | head -n1 || true)"
+          if [[ -z "$LATEST" ]]; then
+            LATEST="v0.0.0"
+          fi
+          echo "Latest tag: $LATEST"
+
+          VERSION="$(go run ./cmd/papertrail bump --base "$LATEST" --fragments changelog.d --manifest .papertrail.config.yml | head -n1)"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "invalid computed version: $VERSION" >&2
+            exit 1
+          fi
+          echo "Computed version: $VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build release branch contents (CHANGELOG + notes + archived fragments)
+        if: steps.frags.outputs.has_fragments == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+
+          go run ./cmd/papertrail merge \
+            --version "$VERSION" \
+            --release-notes-out .papertrail/release-notes.md
+
+          printf '%s\n' "$VERSION" > .papertrail/release-version
+
+      - name: Create or update draft release PR
+        if: steps.frags.outputs.has_fragments == 'true'
+        id: cpr
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: release-pending
+          base: main
+          commit-message: "chore(release): ${{ steps.ver.outputs.version }}"
+          title: "chore(release): ${{ steps.ver.outputs.version }}"
+          body-path: .papertrail/release-notes.md
+          labels: release
+          add-paths: |
+            CHANGELOG.md
+            changelog.d/
+            .papertrail/release-notes.md
+            .papertrail/release-version
+
+      - name: Ensure PR is draft + title is up to date
+        if: steps.frags.outputs.has_fragments == 'true' && steps.cpr.outputs.pull-request-number != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = Number("${{ steps.cpr.outputs.pull-request-number }}");
+            const version = "${{ steps.ver.outputs.version }}";
+
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              title: `chore(release): ${version}`,
+            });
+
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            if (!pr.data.draft) {
+              await github.graphql(`
+                mutation($pullRequestId: ID!) {
+                  convertPullRequestToDraft(input: {pullRequestId: $pullRequestId}) { clientMutationId }
+                }
+              `, { pullRequestId: pr.data.node_id });
+            }
+

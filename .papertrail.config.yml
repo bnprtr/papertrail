@@ -1,0 +1,48 @@
+versioning:
+  # Release bump policy derived from changelog fragment types.
+  #
+  # The tool chooses the highest bump across all fragments in a pending release.
+  # Values: major|minor|patch
+  rules:
+    breaking: major
+    feature: minor
+    fix: patch
+    "*": patch
+
+types:
+  # Allowed fragment types and their ordering in generated output.
+  # Values are case-insensitive; they are normalized internally.
+  order:
+    - breaking
+    - feature
+    - fix
+    - patch
+    - refactor
+    - docs
+
+  # Optional aliases to map alternate spellings to canonical types above.
+  # Example:
+  # aliases:
+  #   CI: PATCH
+  #   HYGIENE: PATCH
+  aliases:
+    # Backwards-compatible aliases for common conventions:
+    BREAKING CHANGE: breaking
+    NEW FEATURE: feature
+    BUGFIX: fix
+    DOCS UPDATE: docs
+
+changelog:
+  # Preferred order for component headings in CHANGELOG/release notes.
+  # Unknown components are appended deterministically at the end (lexicographic).
+  components:
+    - CLI
+    - GitHub Actions
+  strict_components: false
+
+pr_policy:
+  # Explicit opt-out for fragment requirement (label-based, not title-based).
+  fragment_requirement:
+    opt_out_label: no-changelog
+
+
