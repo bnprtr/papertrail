@@ -293,9 +293,9 @@ func cmdPRFragment(args []string) error {
 		}
 	}
 	if !fragChanged {
-		msg := "Non-doc changes detected, but no changelog fragment found under " + *fragmentsDir + "/"
+		msg := "❌ No changelog fragment found under " + *fragmentsDir + "/ (required for non-doc changes)"
 		if cfg.OptOutLabel != "" {
-			msg += " (if truly non-user-visible, add label: " + cfg.OptOutLabel + ")"
+			msg += "\n💡 If this change has no user-visible impact, add the PR label: " + cfg.OptOutLabel
 		}
 		return errors.New(msg)
 	}
