@@ -16,14 +16,54 @@ inputs:
     description: 'Version of papertrail CLI to use (e.g. latest, v0.1.0)'
     required: false
     default: 'latest'
+  token:
+    description: 'GitHub token to post/delete help comments (optional)'
+    required: false
 runs:
   using: 'composite'
   steps:
-    - name: Require fragment
+    - name: Run check
+      id: check
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
       run: |
+        set +e
         go run github.com/bnprtr/papertrail/cmd/papertrail@${{ inputs.version }} pr-fragment \
           --base-ref "origin/${{ inputs.base-ref }}" \
           --fragments "${{ inputs.fragments-dir }}" \
           --manifest "${{ inputs.manifest }}"
-
+        EXIT_CODE=$?
+        
+        # Only attempt commenting if a token is provided and we are in a PR context
+        if [[ -n "${{ inputs.token }}" && "${{ github.event_name }}" == "pull_request" ]]; then
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          MARKER="<!-- papertrail-fragment-required -->"
+          
+          if [ $EXIT_CODE -ne 0 ]; then
+            # Check if we already posted
+            COMMENT_ID=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n 1)
+            
+            BODY="$MARKER
+            ### 📜 Changelog fragment required
+            
+            This pull request contains changes that usually require a changelog fragment. 
+            
+            **How to fix:**
+            1. Add a small YAML file under \`${{ inputs.fragments-dir }}/\` (e.g. \`${{ inputs.fragments-dir }}/20251223_my_change.yml\`).
+            2. If this change is truly non-user-visible, add the PR label \`no-changelog\` to bypass this check."
+            
+            if [ -z "$COMMENT_ID" ]; then
+              gh pr comment "$PR_NUMBER" --body "$BODY"
+            fi
+          else
+            # Check passed, delete help comment if it exists
+            COMMENT_IDS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$MARKER\")) | .id")
+            for ID in $COMMENT_IDS; do
+              gh api -X DELETE "repos/$REPO/issues/comments/$ID"
+            done
+          fi
+        fi
+        
+        exit $EXIT_CODE
