@@ -60,9 +60,12 @@ This pull request contains changes that usually require a changelog fragment.
           else
             # Check passed, delete help comment if it exists
             COMMENT_IDS=$(gh api "repos/$REPO/issues/$PR_NUMBER/comments" --jq ".[] | select(.body | contains(\"$MARKER\")) | .id")
-            for ID in $COMMENT_IDS; do
-              gh api -X DELETE "repos/$REPO/issues/comments/$ID"
-            done
+            if [ -n "$COMMENT_IDS" ]; then
+              for ID in $COMMENT_IDS; do
+                echo "Deleting comment $ID"
+                gh api -X DELETE "repos/$REPO/issues/comments/$ID"
+              done
+            fi
           fi
         fi
         
