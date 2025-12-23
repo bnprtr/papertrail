@@ -23,6 +23,12 @@ This changelog records foundational, user-visible changes to Papertrail, organiz
 - Treat `CHANGELOG.md` as **release-only**: avoid editing it directly in PRs; add fragments instead.
 
 
+## v0.0.2 (2025-12-23)
+
+### GitHub Actions
+
+- **feature**: Enhance the `require-fragment` action to post a helpful PR comment on failure and automatically delete it once fixed (via fragment addition or label).
+
 ## v0.0.1 (2025-12-23)
 
 ### CLI
