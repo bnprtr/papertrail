@@ -4,8 +4,8 @@ versioning:
   # The tool chooses the highest bump across all fragments in a pending release.
   # Values: major|minor|patch
   rules:
-    breaking: major
-    feature: minor
+    breaking: patch
+    feature: patch
     fix: patch
     "*": patch
 

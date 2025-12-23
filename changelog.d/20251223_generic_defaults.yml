@@ -1,0 +1,5 @@
+component: CLI
+type: patch
+summary: Remove repo-specific default component/type ordering; when ordering is not configured, Papertrail uses deterministic lexicographic ordering and accepts any fragment type.
+refs:
+  - cmd/papertrail/main.go
