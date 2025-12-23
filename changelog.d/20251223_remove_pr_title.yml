@@ -1,0 +1,6 @@
+component: CLI
+type: refactor
+summary: Remove built-in PR title validation; Papertrail focuses on fragment-driven changelog and release automation.
+refs:
+  - cmd/papertrail/main.go
+

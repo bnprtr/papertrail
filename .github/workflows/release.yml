@@ -62,8 +62,8 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
           go run ./cmd/papertrail merge \
             --version "$VERSION" \
-            --release-notes-out .release-notes.md
-          printf '%s\n' "$VERSION" > .release-version
+            --release-notes-out .papertrail/release-notes.md
+          printf '%s\n' "$VERSION" > .papertrail/release-version
 
       - name: Create release PR
         uses: peter-evans/create-pull-request@v7
@@ -71,13 +71,13 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "chore(release): ${{ steps.ver.outputs.version }}"
           title: "chore(release): ${{ steps.ver.outputs.version }}"
-          body-path: .release-notes.md
+          body-path: .papertrail/release-notes.md
           branch: release-pending
           base: main
           labels: release
           add-paths: |
             CHANGELOG.md
             changelog.d/
-            .release-notes.md
-            .release-version
+            .papertrail/release-notes.md
+            .papertrail/release-version
 

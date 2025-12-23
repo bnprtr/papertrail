@@ -20,16 +20,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if git show --name-only --pretty='' HEAD | grep -qx '.release-version'; then
-            echo ".release-version changed in this commit; treating as release publish trigger."
+          if git show --name-only --pretty='' HEAD | grep -qx '.papertrail/release-version'; then
+            echo ".papertrail/release-version changed in this commit; treating as release publish trigger."
           else
-            echo ".release-version not changed in this commit; skipping publish."
+            echo ".papertrail/release-version not changed in this commit; skipping publish."
             echo "is_release=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if [[ -f .release-version ]]; then
-            VERSION="$(cat .release-version | tr -d '\n' | tr -d '\r')"
+          if [[ -f .papertrail/release-version ]]; then
+            VERSION="$(cat .papertrail/release-version | tr -d '\n' | tr -d '\r')"
             if [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "is_release=true" >> "$GITHUB_OUTPUT"
               echo "version=$VERSION" >> "$GITHUB_OUTPUT"
@@ -84,6 +84,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.rel.outputs.version }}
-          body_path: .release-notes.md
+          body_path: .papertrail/release-notes.md
           files: dist/*
 

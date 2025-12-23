@@ -55,13 +55,13 @@ When `main` contains unarchived fragments under `changelog.d/`, the repo has a *
 - A draft release PR is automatically opened/updated and includes:
   - updated `CHANGELOG.md`
   - archived fragments under `changelog.d/archived/<version>/`
-  - `.release-notes.md` used as the GitHub Release body
-  - `.release-version` used by the publish workflow
+  - `.papertrail/release-notes.md` used as the GitHub Release body
+  - `.papertrail/release-version` used by the publish workflow
 
 ## Best practices
 
 - Prefer **one fragment per PR**. Split only when a single PR genuinely spans multiple components or change types.
 - Keep summaries **user-outcome focused**.
 - **Opt-out label**: if a PR is truly non-user-visible, add the PR label `no-changelog` to opt out of fragments.
-- **PR titles**: title validation is optional and configured in `.papertrail.config.yml` (`pr_policy.title_validation.enabled`).
+ 
 

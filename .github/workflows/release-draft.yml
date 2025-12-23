@@ -69,9 +69,9 @@ jobs:
 
           go run ./cmd/papertrail merge \
             --version "$VERSION" \
-            --release-notes-out .release-notes.md
+            --release-notes-out .papertrail/release-notes.md
 
-          printf '%s\n' "$VERSION" > .release-version
+          printf '%s\n' "$VERSION" > .papertrail/release-version
 
       - name: Create or update draft release PR
         if: steps.frags.outputs.has_fragments == 'true'
@@ -83,13 +83,13 @@ jobs:
           base: main
           commit-message: "chore(release): ${{ steps.ver.outputs.version }}"
           title: "chore(release): ${{ steps.ver.outputs.version }}"
-          body-path: .release-notes.md
+          body-path: .papertrail/release-notes.md
           labels: release
           add-paths: |
             CHANGELOG.md
             changelog.d/
-            .release-notes.md
-            .release-version
+            .papertrail/release-notes.md
+            .papertrail/release-version
 
       - name: Ensure PR is draft + title is up to date
         if: steps.frags.outputs.has_fragments == 'true' && steps.cpr.outputs.pull-request-number != ''

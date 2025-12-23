@@ -33,36 +33,6 @@ func TestBumpSemver(t *testing.T) {
 	}
 }
 
-func TestParsePRType(t *testing.T) {
-	t.Parallel()
-
-	cfg := prPolicy{
-		TitleEnabled: true,
-		AllowedTypes: []string{"feat", "fix", "docs"},
-		TypeAliases:  map[string]string{"feature": "feat"},
-	}
-
-	typ, err := parsePRType(cfg, "feat(cli): add thing")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if typ != "feat" {
-		t.Fatalf("got %q, want %q", typ, "feat")
-	}
-
-	typ, err = parsePRType(cfg, "feature: add thing")
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if typ != "feat" {
-		t.Fatalf("got %q, want %q", typ, "feat")
-	}
-
-	if _, err := parsePRType(cfg, "bad: no"); err == nil {
-		t.Fatalf("expected error")
-	}
-}
-
 func TestCanonicalizeType_Alias(t *testing.T) {
 	t.Parallel()
 

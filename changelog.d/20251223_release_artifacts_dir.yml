@@ -1,0 +1,8 @@
+component: GitHub Actions
+type: patch
+summary: Move release artifacts into a dedicated .papertrail/ directory to reduce repo root bloat.
+refs:
+  - .github/workflows/release-draft.yml
+  - .github/workflows/release.yml
+  - .github/workflows/publish.yml
+

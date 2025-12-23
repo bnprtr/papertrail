@@ -54,12 +54,6 @@ type releaseManifest struct {
 	} `yaml:"types"`
 
 	PRPolicy struct {
-		TitleValidation struct {
-			Enabled      bool              `yaml:"enabled"`
-			AllowedTypes []string          `yaml:"allowed_types"`
-			TypeAliases  map[string]string `yaml:"type_aliases"`
-		} `yaml:"title_validation"`
-
 		FragmentRequirement struct {
 			OptOutLabel string `yaml:"opt_out_label"`
 		} `yaml:"fragment_requirement"`
@@ -67,18 +61,15 @@ type releaseManifest struct {
 }
 
 var (
-	defaultComponentOrder = []string{
-		"CLI",
-		"GitHub Actions",
-	}
-	defaultTypeOrder = []string{
-		"BREAKING CHANGE",
-		"NEW FEATURE",
-		"BUGFIX",
-		"PATCH",
-		"REFACTOR",
-		"DOCS UPDATE",
-	}
+	// No repo-specific defaults.
+	//
+	// If the config does not specify `changelog.components`, Papertrail will order
+	// components deterministically (lexicographic).
+	defaultComponentOrder []string
+
+	// If the config does not specify `types.order`, Papertrail will order types
+	// deterministically (lexicographic) and will not enforce an allowlist.
+	defaultTypeOrder []string
 )
 
 const (
@@ -99,11 +90,6 @@ func main() {
 		}
 	case "bump":
 		if err := cmdBump(os.Args[2:]); err != nil {
-			fmt.Fprintln(os.Stderr, err.Error())
-			os.Exit(1)
-		}
-	case "pr-title":
-		if err := cmdPRTitle(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			os.Exit(1)
 		}
@@ -134,7 +120,6 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  papertrail check --fragments <dir>")
 	fmt.Fprintln(w, "  papertrail bump --base vX.Y.Z --fragments <dir> [--manifest <path>]")
-	fmt.Fprintln(w, "  papertrail pr-title [--manifest <path>]   (reads GITHUB_EVENT_PATH)")
 	fmt.Fprintln(w, "  papertrail pr-fragment --base-ref <ref> --fragments <dir> [--manifest <path>]   (reads GITHUB_EVENT_PATH)")
 	fmt.Fprintln(w, "  papertrail preview <fragment.yml> [more fragments...]")
 	fmt.Fprintln(w, "  papertrail merge --version vX.Y.Z --fragments <dir> --changelog <path> [--date YYYY-MM-DD] [--release-notes-out <path>]")
@@ -214,15 +199,9 @@ func cmdBump(args []string) error {
 		}
 		bt, ok := bumpFromRules(rules, f.Type)
 		if !ok {
-			// No manifest: fall back to defaults.
-			switch strings.ToUpper(strings.TrimSpace(f.Type)) {
-			case "BREAKING CHANGE":
-				bt = bumpMajor
-			case "NEW FEATURE":
-				bt = bumpMinor
-			default:
-				bt = bumpPatch
-			}
+			// No bump mapping found (e.g., no manifest, or manifest missing an explicit mapping and '*').
+			// Default to patch to avoid surprising "semantic" hard-codes; configure desired mapping in `.papertrail.config.yml`.
+			bt = bumpPatch
 		}
 		if bt > bump {
 			bump = bt
@@ -268,38 +247,6 @@ func cmdPreview(args []string) error {
 	return nil
 }
 
-func cmdPRTitle(args []string) error {
-	fs := flag.NewFlagSet("pr-title", flag.ContinueOnError)
-	fs.SetOutput(ioDiscard{})
-	manifestPath := fs.String("manifest", "", "optional release config YAML path")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	manifest, err := loadManifestDefault(*manifestPath)
-	if err != nil {
-		return err
-	}
-	cfg := prPolicyFromManifest(manifest)
-
-	if !cfg.TitleEnabled {
-		return nil
-	}
-
-	evPath := strings.TrimSpace(os.Getenv("GITHUB_EVENT_PATH"))
-	if evPath == "" {
-		return fmt.Errorf("GITHUB_EVENT_PATH is required")
-	}
-	title, _, err := readPRTitleAndLabels(evPath)
-	if err != nil {
-		return err
-	}
-	if err := validatePRTitle(cfg, title); err != nil {
-		return err
-	}
-	return nil
-}
-
 func cmdPRFragment(args []string) error {
 	fs := flag.NewFlagSet("pr-fragment", flag.ContinueOnError)
 	fs.SetOutput(ioDiscard{})
@@ -323,7 +270,7 @@ func cmdPRFragment(args []string) error {
 	if evPath == "" {
 		return fmt.Errorf("GITHUB_EVENT_PATH is required")
 	}
-	_, labels, err := readPRTitleAndLabels(evPath)
+	labels, err := readPRLabels(evPath)
 	if err != nil {
 		return err
 	}
@@ -505,7 +452,9 @@ func readAndValidateFragment(path string, manifest releaseManifest) (fragment, e
 	}
 	f.Type = canonicalizeFragmentType(f.Type, manifest)
 	order := typeOrderFromManifest(manifest)
-	if !contains(order, f.Type) {
+	// If a type order is configured, treat it as an allowlist.
+	// If no type order is configured, accept any type.
+	if len(manifest.Types.Order) > 0 && !contains(order, f.Type) {
 		return fragment{}, fmt.Errorf("unknown type %q (expected one of %s)", f.Type, strings.Join(order, ", "))
 	}
 	return f, nil
@@ -523,15 +472,13 @@ func renderReleaseSection(version, date string, items []item, manifest releaseMa
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
-		ai := componentIndex(rows[i].frag.Component, manifest)
-		aj := componentIndex(rows[j].frag.Component, manifest)
-		if ai != aj {
-			return ai < aj
+		compOrder := componentOrderFromManifest(manifest)
+		if c := compareByOrderOrLex(rows[i].frag.Component, rows[j].frag.Component, compOrder); c != 0 {
+			return c < 0
 		}
-		ti := typeIndex(rows[i].frag.Type, manifest)
-		tj := typeIndex(rows[j].frag.Type, manifest)
-		if ti != tj {
-			return ti < tj
+		typeOrder := typeOrderFromManifest(manifest)
+		if c := compareByOrderOrLex(rows[i].frag.Type, rows[j].frag.Type, typeOrder); c != 0 {
+			return c < 0
 		}
 		return filepath.Base(rows[i].path) < filepath.Base(rows[j].path)
 	})
@@ -577,15 +524,13 @@ func renderPreview(items []item, manifest releaseManifest) []byte {
 	}
 
 	sort.Slice(rows, func(i, j int) bool {
-		ai := componentIndex(rows[i].frag.Component, manifest)
-		aj := componentIndex(rows[j].frag.Component, manifest)
-		if ai != aj {
-			return ai < aj
+		compOrder := componentOrderFromManifest(manifest)
+		if c := compareByOrderOrLex(rows[i].frag.Component, rows[j].frag.Component, compOrder); c != 0 {
+			return c < 0
 		}
-		ti := typeIndex(rows[i].frag.Type, manifest)
-		tj := typeIndex(rows[j].frag.Type, manifest)
-		if ti != tj {
-			return ti < tj
+		typeOrder := typeOrderFromManifest(manifest)
+		if c := compareByOrderOrLex(rows[i].frag.Type, rows[j].frag.Type, typeOrder); c != 0 {
+			return c < 0
 		}
 		return filepath.Base(rows[i].path) < filepath.Base(rows[j].path)
 	})
@@ -682,10 +627,27 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
-func componentIndex(c string, manifest releaseManifest) int {
-	order := componentOrderFromManifest(manifest)
-	for i, v := range order {
-		if v == c {
+func compareByOrderOrLex(a, b string, order []string) int {
+	if a == b {
+		return 0
+	}
+	if len(order) > 0 {
+		ai := indexIn(order, a)
+		bi := indexIn(order, b)
+		if ai != bi {
+			return ai - bi
+		}
+		// Both unknown: stable lexicographic tiebreaker.
+	}
+	if a < b {
+		return -1
+	}
+	return 1
+}
+
+func indexIn(order []string, v string) int {
+	for i, o := range order {
+		if o == v {
 			return i
 		}
 	}
@@ -882,82 +844,17 @@ func normalizeBumpRuleKeys(rules map[string]string, typeAliases map[string]strin
 }
 
 type prPolicy struct {
-	TitleEnabled bool
-	AllowedTypes []string
-	TypeAliases  map[string]string
-	OptOutLabel  string
+	OptOutLabel string
 }
 
 func prPolicyFromManifest(m releaseManifest) prPolicy {
 	p := prPolicy{
-		TitleEnabled: m.PRPolicy.TitleValidation.Enabled,
-		AllowedTypes: m.PRPolicy.TitleValidation.AllowedTypes,
-		TypeAliases:  m.PRPolicy.TitleValidation.TypeAliases,
-		OptOutLabel:  strings.TrimSpace(m.PRPolicy.FragmentRequirement.OptOutLabel),
-	}
-	if len(p.AllowedTypes) == 0 {
-		p.AllowedTypes = []string{"feat", "fix", "docs", "chore", "refactor", "test"}
-	}
-	if p.TypeAliases == nil {
-		p.TypeAliases = map[string]string{"feature": "feat", "bugfix": "fix"}
+		OptOutLabel: strings.TrimSpace(m.PRPolicy.FragmentRequirement.OptOutLabel),
 	}
 	if p.OptOutLabel == "" {
 		p.OptOutLabel = "no-changelog"
 	}
 	return p
-}
-
-func validatePRTitle(cfg prPolicy, title string) error {
-	if !cfg.TitleEnabled {
-		return nil
-	}
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return fmt.Errorf("PR title is empty")
-	}
-	_, err := parsePRType(cfg, title)
-	return err
-}
-
-func parsePRType(cfg prPolicy, title string) (string, error) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return "", fmt.Errorf("PR title is empty")
-	}
-	colon := strings.Index(title, ":")
-	if colon <= 0 {
-		return "", fmt.Errorf("PR title must match: <type>(<scope>): <title> (scope optional)")
-	}
-	head := strings.TrimSpace(title[:colon])
-	if head == "" {
-		return "", fmt.Errorf("PR title must match: <type>(<scope>): <title> (scope optional)")
-	}
-	typ := head
-	if i := strings.Index(head, "("); i >= 0 {
-		typ = strings.TrimSpace(head[:i])
-	}
-	typ = strings.ToLower(typ)
-	if alias, ok := cfg.TypeAliases[typ]; ok {
-		typ = strings.ToLower(strings.TrimSpace(alias))
-	}
-	if !contains(cfg.AllowedTypes, typ) {
-		return "", fmt.Errorf("invalid PR type %q; allowed types: %s", typ, strings.Join(cfg.AllowedTypes, ", "))
-	}
-	rest := strings.TrimSpace(title[colon+1:])
-	if rest == "" {
-		return "", fmt.Errorf("PR title must include a non-empty title after ':'")
-	}
-	return typ, nil
-}
-
-func typeIndex(t string, manifest releaseManifest) int {
-	order := typeOrderFromManifest(manifest)
-	for i, v := range order {
-		if v == t {
-			return i
-		}
-	}
-	return len(order) + 1
 }
 
 func gitChangedFiles(baseRef string) ([]string, error) {
@@ -976,25 +873,20 @@ func gitChangedFiles(baseRef string) ([]string, error) {
 	return files, nil
 }
 
-func readPRTitleAndLabels(eventPath string) (title string, labels []string, err error) {
+func readPRLabels(eventPath string) (labels []string, err error) {
 	b, err := os.ReadFile(eventPath)
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
 	var ev struct {
 		PullRequest struct {
-			Title  string `json:"title"`
 			Labels []struct {
 				Name string `json:"name"`
 			} `json:"labels"`
 		} `json:"pull_request"`
 	}
 	if err := json.Unmarshal(b, &ev); err != nil {
-		return "", nil, fmt.Errorf("invalid GitHub event JSON: %w", err)
-	}
-	title = strings.TrimSpace(ev.PullRequest.Title)
-	if title == "" {
-		return "", nil, fmt.Errorf("could not read PR title from %s", eventPath)
+		return nil, fmt.Errorf("invalid GitHub event JSON: %w", err)
 	}
 	for _, l := range ev.PullRequest.Labels {
 		n := strings.TrimSpace(l.Name)
@@ -1012,7 +904,7 @@ func readPRTitleAndLabels(eventPath string) (title string, labels []string, err 
 		out = append(out, n)
 		last = n
 	}
-	return title, out, nil
+	return out, nil
 }
 
 func runGit(args ...string) (string, error) {

@@ -1,5 +1,5 @@
 component: GitHub Actions
-type: BUGFIX
+type: fix
 summary: Fix base-ref handling in the preview and fragment-check composite actions by treating base-ref as a branch name (e.g. main) to avoid origin/origin prefixes.
 refs:
   - .github/actions/preview/action.yml

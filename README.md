@@ -44,7 +44,7 @@ Use Papertrail in your CI to ensure every PR has a fragment:
 ### 4. Release
 Run the merge command to update your `CHANGELOG.md` and archive fragments:
 ```bash
-papertrail merge --version v1.0.0
+papertrail merge --version v1.0.0 --release-notes-out .papertrail/release-notes.md
 ```
 
 ## Agent-friendly workflow
@@ -85,30 +85,10 @@ See [.papertrail.config.yml](./.papertrail.config.yml) for an example.
 ## GitHub Actions
 
 Papertrail provides several composite actions for easy integration:
-- `bnprtr/papertrail/.github/actions/pr-title`: Validates PR titles.
 - `bnprtr/papertrail/.github/actions/require-fragment`: Ensures fragments are present.
 - `bnprtr/papertrail/.github/actions/preview`: Generates a preview comment in PRs.
 
 ### Example workflows (copy/paste)
-
-PR title validation:
-
-```yaml
-name: pr-title
-on:
-  pull_request:
-    types: [opened, edited, reopened, synchronize]
-jobs:
-  pr-title:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - uses: bnprtr/papertrail/.github/actions/pr-title@v0.1.0
-```
 
 Require a fragment on non-doc changes:
 
